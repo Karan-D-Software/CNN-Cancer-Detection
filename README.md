@@ -1,30 +1,48 @@
 # 🩺 CNN Cancer Detection Using Histopathologic Images
 
-## 📕 [Link to Project Notebook](#) <!-- Update with actual link -->
+## ✅ Table of Contents
+1. [Link to Project Notebook](#link-to-project-notebook)
+2. [Dataset](#dataset)
+3. [Introduction](#introduction)
+4. [Problem Analysis](#problem-analysis)
+   - [What is the Problem and Its Impact on Industry?](#what-is-the-problem-and-its-impact-on-industry)
+   - [Machine Learning Model and Rationale](#machine-learning-model-and-rationale)
+   - [Expected Outcome](#expected-outcome)
+5. [Exploratory Data Analysis (EDA)](#exploratory-data-analysis-eda)
+   - [1. Load the Data](#1-load-the-data)
+   - [2. Data Cleaning](#2-data-cleaning)
+   - [3. Data Distribution Analysis](#3-data-distribution-analysis)
+   - [4. Sample Images](#4-sample-images)
+     - [Sample Images with Label 0](#sample-images-with-label-0)
+     - [Sample Images with Label 1](#sample-images-with-label-1)
+   - [5. Data Cleaning Procedures](#5-data-cleaning-procedures)
+6. [Model Training and Evaluation](#model-training-and-evaluation)
+   - [Model Architecture](#model-architecture)
+   - [Training the Model](#training-the-model)
+7. [Model Training and Evaluation](#model-training-and-evaluation-1)
+   - [Data Preparation and Generators](#data-preparation-and-generators)
+   - [Initial Model Architecture](#initial-model-architecture)
+   - [Hyperparameter Tuning and Model Comparison](#hyperparameter-tuning-and-model-comparison)
+   - [Transfer Learning Model](#transfer-learning-model)
+   - [Saving the Best Model](#saving-the-best-model)
+8. [Discussion of Results](#discussion-of-results)
+   - [Original Model Architecture](#original-model-architecture)
+   - [Hyperparameter Tuning](#hyperparameter-tuning)
+   - [Transfer Learning](#transfer-learning)
+   - [Accuracy and Loss Plots](#accuracy-and-loss-plots)
+9. [Conclusion](#conclusion)
+   - [Discuss and Interpret Results](#discuss-and-interpret-results)
+   - [What Helped Improve Performance](#what-helped-improve-performance)
+   - [What Did Not Help or Had Limited Impact](#what-did-not-help-or-had-limited-impact)
+   - [Future Improvements](#future-improvements)
+10. [References](#references)
+
+## 📕 [Link to Project Notebook](https://github.com/Karan-D-Software/CNN-Cancer-Detection/blob/main/Project.ipynb) 
 
 This project aims to perform binary image classification to identify metastatic cancer in small image patches taken from larger digital pathology scans. The objective is to assist pathologists in diagnosing cancer more accurately and efficiently by leveraging Convolutional Neural Networks (CNNs).
 
 ## 📊 Dataset
 We use the Histopathologic Cancer Detection dataset, which includes image patches extracted from pathology scans. The dataset is publicly available on Kaggle. [Link to the Histopathologic Cancer Detection Dataset on Kaggle](https://www.kaggle.com/competitions/histopathologic-cancer-detection).
-
-## ✅ Table of Contents
-1. [Introduction](#introduction)
-2. [Problem Analysis](#problem-analysis)
-3. [Exploratory Data Analysis (EDA)](#exploratory-data-analysis-eda)
-    - [About the Data and Initial Data Cleaning](#about-the-data-and-initial-data-cleaning)
-    - [Data Distribution Analysis](#data-distribution-analysis)
-    - [Correlations Analysis](#correlations-analysis)
-    - [Outlier Analysis](#outlier-analysis)
-    - [Final Data Cleaning](#final-data-cleaning-and-outlier-removal)
-4. [Model Training and Evaluation](#model-training-and-evaluation)
-    - [Model Training](#model-training)
-    - [Evaluation](#evaluation)
-5. [Results and Discussion](#results-and-discussion)
-    - [Clustering Results](#clustering-results)
-    - [Visualization and Interpretation](#visualization-and-interpretation)
-    - [Discussion](#discussion)
-6. [Conclusion](#conclusion)
-7. [References](#references)
 
 ## Introduction
 In this project, we aim to perform binary image classification using Convolutional Neural Networks (CNNs) to identify metastatic cancer in histopathologic images. The dataset used is derived from the PatchCamelyon (PCam) benchmark dataset, providing a straightforward yet clinically relevant task.
@@ -587,6 +605,41 @@ We also experimented with transfer learning using the VGG16 architecture. Here a
 
 ![Plots of Results](./images/drplot.png)
 This illustrates the training and validation accuracy and loss over five epochs for both the original model and the transfer learning model. The transfer learning model consistently shows higher training and validation accuracy compared to the original model, indicating better performance and generalization. The original model’s validation accuracy declines significantly after the third epoch, suggesting overfitting, while the transfer learning model maintains a stable and high validation accuracy. Similarly, in the loss plots, the transfer learning model demonstrates lower and more stable training and validation loss, reflecting its ability to learn more effectively from the data and avoid overfitting issues that the original model encounters. This highlights the effectiveness of transfer learning in improving model performance on this task.
+
+## Conclusion 🏁
+
+### Discuss and Interpret Results
+
+The goal of this project was to identify metastatic cancer in histopathologic images using various Convolutional Neural Network (CNN) architectures and techniques. Throughout the project, we experimented with different model architectures, hyperparameters, and transfer learning to improve the performance of our models.
+
+**Results:**
+- **Original Model**: The original CNN model provided a good baseline but showed significant overfitting. While it achieved reasonable training accuracy, the validation accuracy dropped in the later epochs, indicating poor generalization.
+- **Hyperparameter Tuning**: By adjusting the number of filters and dropout rates, we were able to achieve better validation accuracy in some models. However, finding the right balance was challenging, and some models still suffered from overfitting or fluctuating performance.
+- **Transfer Learning**: The use of a pre-trained VGG16 model significantly improved the performance. Transfer learning models achieved higher and more consistent validation accuracy compared to our original and hyperparameter-tuned models.
+
+**Learnings and Takeaways:**
+1. **Data Augmentation and Preprocessing**: Using data augmentation techniques such as rotation, width shift, height shift, and zoom helped improve the model's ability to generalize by preventing overfitting.
+2. **Hyperparameter Tuning**: Finding the optimal hyperparameters (e.g., number of filters, dropout rate) is crucial. This process, although time-consuming, is essential for improving model performance.
+3. **Transfer Learning**: Leveraging pre-trained models can significantly boost performance, especially when dealing with complex tasks and limited computational resources. Transfer learning allowed us to achieve better results with fewer epochs and reduced training time.
+4. **Early Stopping**: Implementing early stopping was effective in preventing overfitting by halting training when the model's performance on the validation set stopped improving.
+
+#### What Helped Improve Performance
+- **Transfer Learning**: This was the most effective technique, providing robust performance improvements.
+- **Data Augmentation**: Helped enhance the model's generalization capabilities.
+- **Early Stopping**: Prevented overfitting and saved computational resources.
+
+#### What Did Not Help or Had Limited Impact
+- **Original CNN Architecture**: Although it served as a good baseline, the original architecture struggled with overfitting and did not generalize well.
+- **High Dropout Rates**: While dropout is generally used to prevent overfitting, excessively high dropout rates sometimes hindered the model's learning ability.
+
+#### Future Improvements
+1. **Ensemble Methods**: Combining predictions from multiple models could enhance performance and provide more robust results.
+2. **Fine-Tuning Pre-Trained Models**: Instead of freezing all layers, selectively fine-tuning some layers of the pre-trained model could potentially improve performance.
+3. **Advanced Hyperparameter Optimization**: Using techniques like grid search or random search over a larger range of hyperparameters could lead to better model configurations.
+4. **More Data**: Incorporating more labeled data could improve the model's learning and generalization abilities.
+5. **Exploring Other Architectures**: Experimenting with other advanced architectures like ResNet, Inception, or EfficientNet could provide further performance improvements.
+
+In conclusion, this project demonstrated the effectiveness of CNNs and transfer learning in medical image analysis. By iteratively improving our models and leveraging advanced techniques, we were able to achieve significant performance enhancements, laying the groundwork for future work in this area.
 
 ## References
 Veeling, B. S., Linmans, J., Winkens, J., Cohen, T., & Welling, M. (2018). Rotation Equivariant CNNs for Digital Pathology. arXiv:1806.03962.  
