@@ -286,6 +286,307 @@ model.save('cancer_detection_model.h5')
 
 This step ensures that we can reuse the trained model for predictions without retraining.
 
+### Model Training and Evaluation 📦
+
+In this step, we fine-tune our Convolutional Neural Network (CNN) by experimenting with different hyperparameters, architectures, and techniques to improve training performance. The goal is to identify the optimal configuration that maximizes our model's accuracy in detecting metastatic cancer in histopathologic images.
+
+## Data Preparation and Generators
+
+We begin by preparing our dataset and defining data generators for efficient training.
+
+```python
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, BatchNormalization
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from sklearn.model_selection import train_test_split
+import numpy as np
+import pandas as pd
+import os
+from PIL import Image
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.applications import VGG16
+
+# Load the labels
+labels_df = pd.read_csv('train/_labels.csv')
+labels_df['id'] = labels_df['id'] + '.tif'
+labels_df['label'] = labels_df['label'].astype(str)
+
+# Split the data into training and validation sets
+train_df, valid_df = train_test_split(labels_df, test_size=0.2, random_state=42)
+```
+*We load the labels, append the `.tif` extension to each `id` to match the filenames, and convert labels to strings. The dataset is then split into training and validation sets.*
+
+```python
+# Use a smaller subset of the dataset for quick hyperparameter tuning
+small_train_df = train_df.sample(frac=0.1, random_state=42)  # Use 10% of the training data
+small_valid_df = valid_df.sample(frac=0.1, random_state=42)  # Use 10% of the validation data
+```
+*We create smaller subsets of the training and validation datasets for quicker hyperparameter tuning.*
+
+```python
+# Define ImageDataGenerators
+train_datagen = ImageDataGenerator(
+    rescale=1./255,
+    rotation_range=20,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True,
+    fill_mode='nearest'
+)
+
+valid_datagen = ImageDataGenerator(rescale=1./255)
+```
+*ImageDataGenerators are defined for augmenting the training data and rescaling the validation data.*
+
+```python
+train_generator = train_datagen.flow_from_dataframe(
+    dataframe=train_df,
+    directory='train',
+    x_col='id',
+    y_col='label',
+    target_size=(96, 96),
+    batch_size=32,
+    class_mode='binary',
+    shuffle=True
+)
+
+valid_generator = valid_datagen.flow_from_dataframe(
+    dataframe=valid_df,
+    directory='train',
+    x_col='id',
+    y_col='label',
+    target_size=(96, 96),
+    batch_size=32,
+    class_mode='binary',
+    shuffle=False
+)
+
+small_train_generator = train_datagen.flow_from_dataframe(
+    dataframe=small_train_df,
+    directory='train',
+    x_col='id',
+    y_col='label',
+    target_size=(96, 96),
+    batch_size=32,
+    class_mode='binary',
+    shuffle=True
+)
+
+small_valid_generator = valid_datagen.flow_from_dataframe(
+    dataframe=small_valid_df,
+    directory='train',
+    x_col='id',
+    y_col='label',
+    target_size=(96, 96),
+    batch_size=32,
+    class_mode='binary',
+    shuffle=False
+)
+```
+*We create data generators for both the full and smaller datasets, enabling efficient loading and preprocessing of images during model training.*
+
+## Initial Model Architecture
+
+We define our initial CNN model as a baseline for further tuning.
+
+```python
+from tensorflow.keras.models import load_model
+
+# Load the last model created in the last step
+initial_model = load_model('cancer_detection_model.h5')
+
+```
+*We build and train our initial model using convolutional, max-pooling, and batch normalization layers, followed by dense and dropout layers. This initial training helps establish a baseline for comparison.*
+
+## Hyperparameter Tuning and Model Comparison
+
+We experiment with different numbers of filters and dropout rates to identify the best model configuration.
+
+```python
+# Hyperparameter tuning and Model Comparison
+def build_model(num_filters, dropout_rate):
+    model = Sequential()
+    model.add(Conv2D(num_filters, (3, 3), activation='relu', input_shape=(96, 96, 3)))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(BatchNormalization())
+
+    model.add(Conv2D(num_filters * 2, (3, 3), activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(BatchNormalization())
+
+    model.add(Conv2D(num_filters * 4, (3, 3), activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(BatchNormalization())
+
+    model.add(Flatten())
+    model.add(Dense(512, activation='relu'))
+    model.add(Dropout(dropout_rate))
+    model.add(Dense(1, activation='sigmoid'))
+
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    return model
+
+# Early stopping
+early_stopping = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
+
+# Hyperparameter options
+num_filters_options = [32, 64]
+dropout_rate_options = [0.3, 0.5]
+initial_epochs = 5
+
+best_val_accuracy = 0
+best_model = None
+
+for num_filters in num_filters_options:
+    for dropout_rate in dropout_rate_options:
+        model = build_model(num_filters, dropout_rate)
+        history = model.fit(
+            small_train_generator,
+            steps_per_epoch=len(small_train_generator),
+            validation_data=small_valid_generator,
+            validation_steps=len(small_valid_generator),
+            epochs=initial_epochs,
+            callbacks=[early_stopping]
+        )
+        val_accuracy = max(history.history['val_accuracy'])
+        if val_accuracy > best_val_accuracy:
+            best_val_accuracy = val_accuracy
+            best_model = model
+```
+*We define a model-building function that varies the number of filters and dropout rates. Using early stopping, we train the models on the smaller dataset to quickly identify promising configurations.*
+
+## Transfer Learning Model
+
+We use a pre-trained VGG16 model to leverage transfer learning for potentially better performance and faster convergence.
+
+```python
+# Transfer Learning Model
+def build_transfer_model(dropout_rate, weights_path):
+    base_model = VGG16(weights=weights_path, include_top=False, input_shape=(96, 96, 3))
+    model = Sequential()
+    model.add(base_model)
+    model.add(Flatten())
+    model.add(Dense(512, activation='relu'))
+    model.add(Dropout(dropout_rate))
+    model.add(Dense(1, activation='sigmoid'))
+
+    for layer in base_model.layers:
+        layer.trainable = False
+
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    return model
+
+# Specify the path to the downloaded weights file
+weights_path = 'vgg16_weights_tf_dim_ordering_tf_kernels_notop.h5'
+
+for dropout_rate in dropout_rate_options:
+    model = build_transfer_model(dropout_rate, weights_path)
+    history = model.fit(
+        small_train_generator,
+        steps_per_epoch=len(small_train_generator),
+        validation_data=small_valid_generator,
+        validation_steps=len(small_valid_generator),
+        epochs=initial_epochs,
+        callbacks=[early_stopping]
+    )
+    val_accuracy = max(history.history['val_accuracy'])
+    if val_accuracy > best_val_accuracy:
+        best_val_accuracy = val_accuracy
+        best_model = model
+```
+*We define a transfer learning model using the VGG16 architecture. The pre-trained model's layers are frozen, and additional dense and dropout layers are added for fine-tuning.*
+
+## Saving the Best Model
+
+The best-performing model is saved for future use.
+
+```python
+best_model.save('best_cancer_detection_model.h5')
+```
+*We save the best model identified during hyperparameter tuning and model comparison.*
+
+## Discussion of Results
+
+In this section, we analyze the results from the different models and hyperparameter tuning efforts. Our objective is to compare the performance of the original CNN architecture, models with different hyperparameters, and transfer learning models. We use accuracy and loss metrics for this comparison. Additionally, we had to shorten our testing sizes due to computational constraints.
+
+### Original Model Architecture
+
+The original model architecture, as seen in the provided image, includes several convolutional layers, max-pooling layers, batch normalization layers, and dense layers. This architecture forms the baseline for our comparisons.
+
+### Hyperparameter Tuning
+
+For hyperparameter tuning, we experimented with different numbers of filters and dropout rates. Here are the results of the hyperparameter tuning:
+
+**Model 1: 32 Filters, 0.3 Dropout Rate**
+
+| Epoch | Accuracy | Validation Accuracy |
+|-------|----------|---------------------|
+| 1     | 0.7499   | 0.7564              |
+| 2     | 0.8106   | 0.7523              |
+| 3     | 0.8152   | 0.8095              |
+| 4     | 0.8241   | 0.8191              |
+| 5     | 0.8307   | 0.6484              |
+
+**Model 2: 64 Filters, 0.3 Dropout Rate**
+
+| Epoch | Accuracy | Validation Accuracy |
+|-------|----------|---------------------|
+| 1     | 0.7313   | 0.8175              |
+| 2     | 0.8092   | 0.8075              |
+| 3     | 0.8188   | 0.7709              |
+| 4     | 0.8256   | 0.6477              |
+
+**Model 3: 32 Filters, 0.5 Dropout Rate**
+
+| Epoch | Accuracy | Validation Accuracy |
+|-------|----------|---------------------|
+| 1     | 0.7192   | 0.4198              |
+| 2     | 0.8006   | 0.7780              |
+| 3     | 0.8204   | 0.7923              |
+| 4     | 0.8231   | 0.7164              |
+| 5     | 0.8219   | 0.7770              |
+
+**Model 4: 64 Filters, 0.5 Dropout Rate**
+
+| Epoch | Accuracy | Validation Accuracy |
+|-------|----------|---------------------|
+| 1     | 0.7282   | 0.7491              |
+| 2     | 0.8020   | 0.6645              |
+| 3     | 0.8156   | 0.7598              |
+| 4     | 0.8234   | 0.7877              |
+| 5     | 0.8218   | 0.7045              |
+
+### Transfer Learning
+
+We also experimented with transfer learning using the VGG16 architecture. Here are the results of the transfer learning models:
+
+**Transfer Learning Model 1: 0.3 Dropout Rate**
+
+| Epoch | Accuracy | Validation Accuracy |
+|-------|----------|---------------------|
+| 1     | 0.7859   | 0.8086              |
+| 2     | 0.8110   | 0.8186              |
+| 3     | 0.8137   | 0.8282              |
+| 4     | 0.8196   | 0.8314              |
+| 5     | 0.8227   | 0.8275              |
+
+**Transfer Learning Model 2: 0.5 Dropout Rate**
+
+| Epoch | Accuracy | Validation Accuracy |
+|-------|----------|---------------------|
+| 1     | 0.7778   | 0.7830              |
+| 2     | 0.8020   | 0.8225              |
+| 3     | 0.8054   | 0.8227              |
+| 4     | 0.8090   | 0.8202              |
+| 5     | 0.8176   | 0.8155              |
+
+#### Accuracy and Loss Plots
+
+![Plots of Results](./images/drplot.png)
+This illustrates the training and validation accuracy and loss over five epochs for both the original model and the transfer learning model. The transfer learning model consistently shows higher training and validation accuracy compared to the original model, indicating better performance and generalization. The original model’s validation accuracy declines significantly after the third epoch, suggesting overfitting, while the transfer learning model maintains a stable and high validation accuracy. Similarly, in the loss plots, the transfer learning model demonstrates lower and more stable training and validation loss, reflecting its ability to learn more effectively from the data and avoid overfitting issues that the original model encounters. This highlights the effectiveness of transfer learning in improving model performance on this task.
 
 ## References
 Veeling, B. S., Linmans, J., Winkens, J., Cohen, T., & Welling, M. (2018). Rotation Equivariant CNNs for Digital Pathology. arXiv:1806.03962.  
