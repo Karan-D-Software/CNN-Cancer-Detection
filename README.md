@@ -133,6 +133,159 @@ def check_image_properties(image_ids):
 sample_image_ids = labels_df['id'].sample(5).values
 check_image_properties(sample_image_ids)
 ```
+## Model Training and Evaluation 🧠
+
+### Model Architecture
+
+In this step, we design and train a Convolutional Neural Network (CNN) to identify metastatic cancer in histopathologic images. The CNN is chosen due to its ability to learn spatial hierarchies of features, making it highly effective for image classification tasks, particularly in medical imaging.
+
+Here is the detailed breakdown of our model architecture, and some data manipulation:
+
+```python
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, BatchNormalization
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from sklearn.model_selection import train_test_split
+import pandas as pd
+from PIL import Image
+
+# Load the labels
+labels_df = pd.read_csv('train/_labels.csv')
+
+# Change data types to string
+labels_df['id'] = labels_df['id'] + '.tif'
+labels_df['label'] = labels_df['label'].astype(str)
+
+# Split the data into training and validation sets
+train_df, valid_df = train_test_split(labels_df, test_size=0.2, random_state=42)
+```
+
+Now we will configure data generators for training and validation using TensorFlow's `ImageDataGenerator`. It first sets up the training data generator with various augmentations like rescaling, rotation, shifting, shearing, and flipping to enhance the model's robustness. Then, it creates a validation data generator with only rescaling. The `flow_from_dataframe` method is used to generate batches of augmented/normalized data from the provided dataframes (`train_df` and `valid_df`), specifying the image directory, target size, batch size, and class mode. This setup helps efficiently manage and preprocess the large dataset during model training.
+
+```python
+# Define ImageDataGenerators
+train_datagen = ImageDataGenerator(
+    rescale=1./255,
+    rotation_range=20,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True,
+    fill_mode='nearest'
+)
+
+valid_datagen = ImageDataGenerator(rescale=1./255)
+
+# Create data generators
+train_generator = train_datagen.flow_from_dataframe(
+    dataframe=train_df,
+    directory='train',
+    x_col='id',
+    y_col='label',
+    target_size=(96, 96),
+    batch_size=32,
+    class_mode='binary',
+    shuffle=True
+)
+
+valid_generator = valid_datagen.flow_from_dataframe(
+    dataframe=valid_df,
+    directory='train',
+    x_col='id',
+    y_col='label',
+    target_size=(96, 96),
+    batch_size=32,
+    class_mode='binary',
+    shuffle=False
+)
+```
+
+Now let's start by importing the necessary layers from TensorFlow's Keras module. These layers include convolutional, pooling, and normalization layers, which are essential for building our CNN.
+
+```python
+# Define the model
+model = Sequential()
+```
+
+We initialize a Sequential model, which is a linear stack of layers.
+
+```python
+model.add(Conv2D(32, (3, 3), activation='relu', input_shape=(96, 96, 3)))
+model.add(MaxPooling2D(pool_size=(2, 2)))
+model.add(BatchNormalization())
+```
+
+- **Conv2D Layer**: The first layer is a convolutional layer with 32 filters, each of size 3x3. This layer is responsible for extracting features from the input images. We use the ReLU activation function to introduce non-linearity.
+- **MaxPooling2D Layer**: This layer reduces the spatial dimensions (height and width) of the feature maps by a factor of 2, which helps in reducing the computational cost and the risk of overfitting.
+- **BatchNormalization Layer**: Batch normalization is applied to stabilize and accelerate the training process.
+
+```python
+model.add(Conv2D(64, (3, 3), activation='relu'))
+model.add(MaxPooling2D(pool_size=(2, 2)))
+model.add(BatchNormalization())
+```
+
+The second set of convolutional, pooling, and normalization layers follows the same pattern but increases the number of filters to 64, allowing the model to learn more complex features.
+
+```python
+model.add(Conv2D(128, (3, 3), activation='relu'))
+model.add(MaxPooling2D(pool_size=(2, 2)))
+model.add(BatchNormalization())
+```
+
+The third set of layers further increases the number of filters to 128, enabling the model to capture even more detailed features.
+
+```python
+model.add(Flatten())
+model.add(Dense(512, activation='relu'))
+model.add(Dropout(0.5))
+model.add(Dense(1, activation='sigmoid'))
+```
+
+- **Flatten Layer**: This layer flattens the 3D feature maps to 1D feature vectors, preparing the data for the dense layers.
+- **Dense Layer**: A dense (fully connected) layer with 512 units and ReLU activation is added to learn from the features extracted by the convolutional layers.
+- **Dropout Layer**: Dropout is applied with a rate of 0.5 to prevent overfitting by randomly setting half of the input units to zero during training.
+- **Output Layer**: The final dense layer with a single unit and sigmoid activation function is used to produce the binary classification output (cancerous or non-cancerous).
+
+```python
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+model.summary()
+```
+
+We compile the model using the Adam optimizer, which adjusts the learning rate during training. The loss function used is binary cross-entropy, suitable for binary classification tasks, and we track the model’s accuracy.
+
+## Training the Model
+
+Next, we train the model using the training data and validate its performance on the validation set.
+
+```python
+# Train the model
+history = model.fit(
+    train_generator,
+    steps_per_epoch=len(train_generator),
+    validation_data=valid_generator,
+    validation_steps=len(valid_generator),
+    epochs=10
+)
+```
+
+We use the `ImageDataGenerator` to handle image loading and augmentation on-the-fly, which helps in efficiently managing memory and enhancing the robustness of the model by augmenting the images during training.
+
+- **steps_per_epoch**: This parameter defines the total number of steps (batches of samples) to draw from the generator before declaring one epoch finished and starting the next epoch.
+- **validation_data**: The validation data is used to evaluate the model’s performance after each epoch.
+- **epochs**: We train the model for 10 epochs, balancing between training time and performance improvement.
+
+Finally, we save the trained model for future use.
+
+```python
+# Save the model
+model.save('cancer_detection_model.h5')
+```
+
+This step ensures that we can reuse the trained model for predictions without retraining.
+
 
 ## References
 Veeling, B. S., Linmans, J., Winkens, J., Cohen, T., & Welling, M. (2018). Rotation Equivariant CNNs for Digital Pathology. arXiv:1806.03962.  
